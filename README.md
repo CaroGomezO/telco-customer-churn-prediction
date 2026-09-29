@@ -15,6 +15,7 @@
 ![XGBoost](https://img.shields.io/badge/XGBoost-Ensemble-185a9d?style=flat)
 ![Pandas](https://img.shields.io/badge/Pandas-Dataframe-150458?style=flat&logo=pandas&logoColor=white)
 ![Joblib](https://img.shields.io/badge/Model%20Persistence-Joblib-blue?style=flat)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/CaroGomezO/telco-customer-churn-prediction/blob/feature/persitencia-modelo/Telco_Customer_Churn_Pipeline_Completo.ipynb)
 
 </div>
 
