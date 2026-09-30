@@ -1,6 +1,6 @@
 # 📡 Telco Customer Churn Prediction
 
-> Proyecto desarrollado para el curso **Inteligencia Artificial para las Ciencias e Ingenierías** — Universidad de Antioquia (UdeA).
+> Proyecto desarrollado para el curso **Modelos y Simulacion de Sistemas I** — Universidad de Antioquia (UdeA).
 
 <div align="center">
 
