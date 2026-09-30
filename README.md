@@ -17,7 +17,7 @@
 ![Joblib](https://img.shields.io/badge/Model%20Persistence-Joblib-blue?style=flat)
 
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/CaroGomezO/telco-customer-churn-prediction/blob/feature/persitencia-modelo/Telco_Customer_Churn_Pipeline_Completo.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/CaroGomezO/telco-customer-churn-prediction/blob/main/Telco_Customer_Churn_Pipeline_Completo.ipynb)
 
 </div>
 
