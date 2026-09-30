@@ -55,12 +55,12 @@ Se compararon cuatro familias de algoritmos supervisados utilizando **validació
 
 | Algoritmo | Accuracy (CV) | Precision (CV) | Recall (CV) | F1-Score (CV) | ROC-AUC (CV) | Consistencia (Std F1) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Gradient Boosting** | **80.4%** | **66.8%** | **53.6%** | **0.595** | **0.846** | **± 0.018** |
-| **Regresión Logística** | 80.1% | 65.2% | 54.4% | 0.593 | 0.846 | ± 0.028 |
-| **Random Forest** | 78.7% | 63.3% | 47.9% | 0.545 | 0.824 | ± 0.023 |
-| **XGBoost** | 78.5% | 61.2% | 51.5% | 0.558 | 0.827 | ± 0.026 |
+| **Gradient Boosting** | **80.5%** | **66.9%** | **53.0%** | **0.591** | **0.847** | **± 0.020** |
+| **Regresión Logística** | 80.2% | 65.3% | 54.0% | 0.590 | 0.845 | ± 0.028 |
+| **XGBoost** | 78.9% | 62.2% | 51.8% | 0.565 | 0.823 | ± 0.024 |
+| **Random Forest** | 78.2% | 61.5% | 47.7% | 0.537 | 0.811 | ± 0.020 |
 
-* **Modelo Final Seleccionado:** **`GradientBoostingClassifier`**, optimizado vía `GridSearchCV` (`learning_rate=0.05`, `max_depth=3`, `n_estimators=150`, `subsample=0.8`), debido a su balance superior de F1 y su mínima varianza entre pliegues.
+* **Modelo Final Seleccionado:** **`GradientBoostingClassifier`**, optimizado vía `GridSearchCV` (`learning_rate=0.1`, `max_depth=3`, `n_estimators=100`), debido a su balance superior de F1 y su consistencia estadística entre pliegues.
 
 
 ## Métricas Empleadas y Justificación
@@ -77,8 +77,8 @@ Por ello, se seleccionaron:
 
 Sobre el conjunto de prueba independiente (`X_test`, 1,409 clientes no vistos):
 
-* **Superación del Modelo Base:** El clasificador base (`DummyClassifier`) obtuvo un F1 y Recall de **0.00**. El modelo predictivo final alcanzó un **F1 de 0.58** y un **ROC-AUC de 0.845**.
-* **Detección Efectiva:** Identifica con éxito a más del **52% de los clientes en riesgo** con una precisión del **65%**, reduciendo sustancialmente la fuga involuntaria.
+* **Superación del Modelo Base:** El clasificador base (`DummyClassifier`) obtuvo un F1 y Recall de **0.00**. El modelo predictivo final alcanzó un **F1 de 0.579** y un **ROC-AUC de 0.843**.
+* **Detección Efectiva:** Identifica con éxito al **51.1% de los clientes en riesgo** (Recall = 0.511) con una precisión del **66.8%** (Precision = 0.668), superando ampliamente la nula capacidad de detección del modelo base.
 * **Variables Más Determinantes:** El análisis de importancia de variables reveló que los factores que más impulsan el abandono son:
   1. Contrato mes a mes (`Contract_Month-to-month`).
   2. Baja antigüedad (`tenure`).
