@@ -4,7 +4,7 @@
     "precision": 0.667832,
     "recall": 0.510695,
     "f1": 0.578788,
-    "roc_auc": 0.843318
+    "roc_auc": 0.843321
   },
   "baseline": {
     "accuracy": 0.734564,

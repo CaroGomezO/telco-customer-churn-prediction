@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "created_at": "2026-10-23T17:58:33.974703+00:00",
+  "created_at": "2026-10-23T19:27:20.982117+00:00",
   "problem_type": "binary_classification",
   "target": "Churn",
   "algorithm": "GradientBoostingClassifier",
@@ -26,7 +26,7 @@
   ],
   "expected_types": {
     "gender": "str",
-    "SeniorCitizen": "int64",
+    "SeniorCitizen": "str",
     "Partner": "str",
     "Dependents": "str",
     "tenure": "int64",
@@ -47,7 +47,12 @@
   "seed": 42,
   "parameters": {
     "test_size": 0.2,
-    "random_state": 42
+    "random_state": 42,
+    "model": {
+      "learning_rate": 0.1,
+      "max_depth": 3,
+      "n_estimators": 100
+    }
   },
   "data": {
     "source": "..\\fase-1\\DatosCrudos.csv",
@@ -57,10 +62,5 @@
   },
   "python": "3.11.9",
   "requirements": "requirements.txt",
-  "git_revision": "82a1043",
-  "prediction_rules": {
-    "missing_values": "numeric median and categorical most_frequent, learned on train",
-    "extra_columns": "ignored",
-    "unknown_categories": "ignored by OneHotEncoder"
-  }
+  "git_revision": "a0c9c4e"
 }
