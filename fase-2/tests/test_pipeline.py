@@ -4,8 +4,7 @@ import joblib
 import pandas as pd
 import pytest
 
-from pipeline import train_and_save
-
+from pipeline import prepare_features, train_and_save
 
 def dataset() -> pd.DataFrame:
     rows = []
@@ -96,3 +95,17 @@ def test_versions_are_preserved_and_duplicate_is_rejected(tmp_path):
     assert (models / "v2" / "modelo.joblib").is_file()
     with pytest.raises(FileExistsError):
         train_and_save(data, "Churn", models, "v1")
+
+
+def test_prepare_features_accepts_binary_representations():
+    frame = pd.DataFrame({"SeniorCitizen": [0, 1, "0", "1", None]})
+    prepared = prepare_features(frame)
+    expected = pd.Series(["No", "Yes", "No", "Yes", None], name="SeniorCitizen")
+    pd.testing.assert_series_equal(prepared["SeniorCitizen"], expected, check_dtype=False)
+
+
+def test_prepare_features_rejects_invalid_values():
+    frame = pd.DataFrame({"SeniorCitizen": ["invalid", "Yes", "No", 2]})
+    with pytest.raises(ValueError, match="solo puede contener valores 0 o 1"):
+        prepare_features(frame)
+

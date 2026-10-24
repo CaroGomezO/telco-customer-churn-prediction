@@ -98,6 +98,7 @@ Permite su carga inmediata mediante `joblib.load()` y validación de consistenci
 ```bash
 git clone https://github.com/CaroGomezO/telco-customer-churn-prediction.git
 cd telco-customer-churn-prediction
+cd fase-1
 ```
 
 ### 2. Crear y activar un entorno virtual (Recomendado)

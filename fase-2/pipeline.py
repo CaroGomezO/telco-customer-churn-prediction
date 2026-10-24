@@ -75,7 +75,7 @@ def prepare_features(frame: pd.DataFrame) -> pd.DataFrame:
         senior_citizen = prepared["SeniorCitizen"].map({0: "No", 1: "Yes", "0": "No", "1": "Yes"})
         invalid = prepared["SeniorCitizen"].notna() & senior_citizen.isna()
         if invalid.any():
-            raise ValueError("La columna 'SeniorCitizen' solo puede contener 0/1 o Yes/No.")
+            raise ValueError("La columna 'SeniorCitizen' solo puede contener valores 0 o 1.")
         prepared["SeniorCitizen"] = senior_citizen
     return prepared
 
