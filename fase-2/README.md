@@ -204,3 +204,56 @@ Los datos de entrada y el modelo se proporcionan al contenedor mediante montajes
 La imagen permite ejecutar los scripts de entrenamiento y predicción sin entrenar durante la construcción. Los parámetros de entrada permiten seleccionar los datos, la variable objetivo, la versión del modelo y otros valores de ejecución.
 
 **Entorno de verificación:** Linux, terminal Bash y Docker. La construcción de la imagen, la comprobación de Python y las ejecuciones de entrenamiento y predicción se verificaron manualmente.
+
+
+### 11.5. Ejecución en Windows
+
+Los usuarios de Windows pueden ejecutar los comandos anteriores utilizando Docker Desktop con el motor de contenedores iniciado. También pueden utilizar PowerShell, siempre que Docker esté instalado y disponible en la terminal.
+
+Los comandos siguientes son equivalentes a los anteriores y deben ejecutarse desde el directorio `fase-2` en PowerShell.
+
+**Construcción de la imagen y comprobación de Python:**
+
+```powershell
+docker build -t modelos-fase2:1.0 .
+
+docker run --rm modelos-fase2:1.0 python --version
+```
+
+**Creación de las carpetas necesarias:**
+
+```powershell
+New-Item -ItemType Directory -Force -Path models, outputs
+```
+
+**Entrenamiento del modelo:**
+
+```powershell
+docker run --rm `
+  -v "${PWD}/data:/app/data:ro" `
+  -v "${PWD}/models:/app/models" `
+  -v "${PWD}/../fase-1:/data:ro" `
+  modelos-fase2:1.0 python train.py `
+  --data /data/DatosCrudos.csv `
+  --target Churn `
+  --output-dir models `
+  --version V-docker `
+  --seed 42
+```
+
+**Ejecución de predicciones:**
+
+```powershell
+docker run --rm `
+  -v "${PWD}/data:/app/data:ro" `
+  -v "${PWD}/models:/app/models:ro" `
+  -v "${PWD}/outputs:/app/outputs" `
+  modelos-fase2:1.0 python predict.py `
+  --model models/V-docker/modelo.joblib `
+  --input data/ejemplo_prediccion.csv `
+  --output outputs/predicciones_docker.csv
+```
+
+En PowerShell, el acento grave (`` ` ``) permite continuar un comando en la siguiente línea. Debe colocarse al final de cada línea que continúa, sin espacios después de él.
+
+Las rutas de origen de los montajes corresponden a las carpetas del equipo anfitrión, mientras que las rutas de destino corresponden al contenedor. Por tanto, los archivos generados permanecen en el equipo anfitrión después de que el contenedor se elimina.
