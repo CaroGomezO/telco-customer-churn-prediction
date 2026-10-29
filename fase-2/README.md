@@ -126,3 +126,134 @@ Columnas: prediccion (1 = Yes, 0 = No), etiqueta, probabilidad_churn
 | 9402-ROUMJ | 0 | No | 0.111843 |
 
 Las pruebas de predicción están en `tests\test_predict.py` (se ejecutan con `python -m pytest`).
+
+## 11. Contenerización con Docker
+
+### 11.1. Construcción de la imagen
+
+La imagen se construye a partir de `python:3.11-slim-bookworm`, utilizando Python 3.11 e instalando las dependencias especificadas en `requirements.txt`.
+
+Desde el directorio `fase-2`, ejecutar:
+
+```bash
+docker build -t modelos-fase2:1.0 .
+```
+
+Para comprobar la versión de Python de la imagen:
+
+```bash
+docker run --rm modelos-fase2:1.0 python --version
+```
+
+**Resultado obtenido:** `Python 3.11.18`.
+
+### 11.2. Entrenamiento del modelo
+
+El conjunto de datos de entrenamiento se proporciona mediante un montaje de solo lectura desde la carpeta `fase-1` del proyecto. Los artefactos generados se guardan en `fase-2/models`, de manera que persisten después de eliminar el contenedor.
+
+Antes de ejecutar los comandos, crear las carpetas de resultados si todavía no existen:
+
+```bash
+mkdir -p models outputs
+```
+
+Ejecutar el entrenamiento:
+
+```bash
+docker run --rm \
+  -v "$PWD/data:/app/data:ro" \
+  -v "$PWD/models:/app/models" \
+  -v "$PWD/../fase-1:/data:ro" \
+  modelos-fase2:1.0 python train.py \
+  --data /data/DatosCrudos.csv \
+  --target Churn \
+  --output-dir models \
+  --version V-docker \
+  --seed 42
+```
+
+El comando recibe como parámetros la ruta del conjunto de datos, la variable objetivo, el directorio de salida, el identificador de versión y la semilla aleatoria.
+
+**Resultado obtenido:** el entrenamiento finalizó correctamente y generó los siguientes archivos en `models/V-docker/`:
+
+- `modelo.joblib`: modelo entrenado.
+- `metrics.json`: métricas de evaluación.
+- `metadata.json`: metadatos de la versión.
+
+### 11.3. Ejecución de predicciones
+
+Para realizar predicciones se utiliza el modelo generado durante el entrenamiento. El directorio de modelos se monta en modo de solo lectura, mientras que el directorio de salida permite escribir los resultados.
+
+```bash
+docker run --rm \
+  -v "$PWD/data:/app/data:ro" \
+  -v "$PWD/models:/app/models:ro" \
+  -v "$PWD/outputs:/app/outputs" \
+  modelos-fase2:1.0 python predict.py \
+  --model models/V-docker/modelo.joblib \
+  --input data/ejemplo_prediccion.csv \
+  --output outputs/predicciones_docker.csv
+```
+
+**Resultado obtenido:** el proceso finalizó correctamente y procesó 8 filas. El archivo `outputs/predicciones_docker.csv` contiene las predicciones generadas, junto con las etiquetas y probabilidades de churn.
+
+### 11.4. Persistencia y reproducibilidad
+
+Los datos de entrada y el modelo se proporcionan al contenedor mediante montajes de directorios del equipo anfitrión. Los modelos, las métricas, los metadatos y las predicciones se almacenan fuera del contenedor, por lo que permanecen disponibles después de su eliminación.
+
+La imagen permite ejecutar los scripts de entrenamiento y predicción sin entrenar durante la construcción. Los parámetros de entrada permiten seleccionar los datos, la variable objetivo, la versión del modelo y otros valores de ejecución.
+
+**Entorno de verificación:** Linux, terminal Bash y Docker. La construcción de la imagen, la comprobación de Python y las ejecuciones de entrenamiento y predicción se verificaron manualmente.
+
+
+### 11.5. Ejecución en Windows
+
+Los usuarios de Windows pueden ejecutar los comandos anteriores utilizando Docker Desktop con el motor de contenedores iniciado. También pueden utilizar PowerShell, siempre que Docker esté instalado y disponible en la terminal.
+
+Los comandos siguientes son equivalentes a los anteriores y deben ejecutarse desde el directorio `fase-2` en PowerShell.
+
+**Construcción de la imagen y comprobación de Python:**
+
+```powershell
+docker build -t modelos-fase2:1.0 .
+
+docker run --rm modelos-fase2:1.0 python --version
+```
+
+**Creación de las carpetas necesarias:**
+
+```powershell
+New-Item -ItemType Directory -Force -Path models, outputs
+```
+
+**Entrenamiento del modelo:**
+
+```powershell
+docker run --rm `
+  -v "${PWD}/data:/app/data:ro" `
+  -v "${PWD}/models:/app/models" `
+  -v "${PWD}/../fase-1:/data:ro" `
+  modelos-fase2:1.0 python train.py `
+  --data /data/DatosCrudos.csv `
+  --target Churn `
+  --output-dir models `
+  --version V-docker `
+  --seed 42
+```
+
+**Ejecución de predicciones:**
+
+```powershell
+docker run --rm `
+  -v "${PWD}/data:/app/data:ro" `
+  -v "${PWD}/models:/app/models:ro" `
+  -v "${PWD}/outputs:/app/outputs" `
+  modelos-fase2:1.0 python predict.py `
+  --model models/V-docker/modelo.joblib `
+  --input data/ejemplo_prediccion.csv `
+  --output outputs/predicciones_docker.csv
+```
+
+En PowerShell, el acento grave (`` ` ``) permite continuar un comando en la siguiente línea. Debe colocarse al final de cada línea que continúa, sin espacios después de él.
+
+Las rutas de origen de los montajes corresponden a las carpetas del equipo anfitrión, mientras que las rutas de destino corresponden al contenedor. Por tanto, los archivos generados permanecen en el equipo anfitrión después de que el contenedor se elimina.
