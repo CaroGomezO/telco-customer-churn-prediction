@@ -24,14 +24,14 @@
 
 ## Integrantes del Equipo
 * **Carolina Gómez Osorno** — [@CaroGomezO](https://github.com/CaroGomezO)
-* **Julián Esteban Hurtado Serna** — [@Julian-debug-s](https://github.com/Julian-debug-s)
+* **Julian Esteban Hurtado Serna** — [@Julian-debug-s](https://github.com/Julian-debug-s)
 * **Emanuel López Franco** — [@ema28pro](https://github.com/ema28pro)
 
 ## Descripción del Problema
 
-En la industria de telecomunicaciones, la deserción de clientes (*Customer Churn*) representa uno de los mayores impactos sobre los ingresos y la cuota de mercado. Atraer a un nuevo cliente cuesta entre 5 y 25 veces más que retener a uno existente. 
+En la industria de telecomunicaciones, la deserción de clientes (*Customer Churn*) representa uno de los mayores impactos sobre los ingresos y la cuota de mercado. Atraer a un nuevo cliente cuesta entre 5 y 25 veces más que retener a uno existente.
 
-Este proyecto aborda la necesidad de la compañía de identificar de forma automatizada y temprana qué usuarios presentan una alta probabilidad de cancelar su suscripción en el próximo ciclo, permitiendo al área de fidelización diseñar ofertas y retenciones preventivas antes de que el cliente abandone el servicio.
+Este proyecto aborda la necesidad de una empresa de telecomunicaciones de identificar de forma automatizada y temprana qué usuarios presentan una alta probabilidad de cancelar su suscripción en el próximo ciclo, permitiendo al área de fidelización diseñar ofertas y retenciones preventivas antes de que el cliente abandone el servicio.
 
 ## Objetivo del Modelo
 
@@ -42,11 +42,23 @@ Diseñar, entrenar, optimizar y almacenar un modelo de aprendizaje automático s
 
 ##  Fuente del Conjunto de Datos
 
-* **Origen:** Dataset público *Telco Customer Churn* de IBM Cognos Analytics / [Kaggle](https://www.kaggle.com/datasets/blastchar/telco-customer-churn).
+* **Origen:** Dataset público *Telco Customer Churn* de IBM Cognos Analytics / [Kaggle](https://www.kaggle.com/datasets/blastchar/telco-customer-churn). Son datos de ejemplo de una **empresa de telecomunicaciones ficticia**.
 * **Observaciones:** 7,043 clientes.
 * **Variables:** 21 características iniciales (información demográfica, servicios contratados de telefonía/internet, tipo de contrato, facturación y la variable objetivo `Churn`).
 * **Tratamiento de nulos:** Se detectaron 11 registros no numéricos en `TotalCharges` correspondientes a usuarios nuevos con antigüedad de 0 meses (`tenure == 0`).
 * **Tratamiento de multicolinealidad:** Mediante el Factor de Inflación de la Varianza (VIF), se evidenció una colinealidad crítica en `TotalCharges` (VIF > 9.5), procediendo a su eliminación técnica justificada para preservar únicamente `tenure` y `MonthlyCharges` (VIF resultante = 1.07).
+
+
+## Alcance y Limitaciones de los Resultados
+
+* **Datos de una empresa ficticia:** IBM publicó este conjunto como dato de ejemplo. Describe una compañía de telecomunicaciones inventada (7,043 clientes en California durante un trimestre). No son clientes reales de ninguna empresa.
+* **No son evidencia sobre clientes reales de operadores colombianos ni de ningún otro operador real:** Los patrones que aprende el modelo son propios de este conjunto de ejemplo y podrían no cumplirse en otro mercado.
+* **El valor del trabajo es metodológico:** muestra cómo construir, validar y documentar un modelo de forma reproducible. Para un uso real habría que reentrenarlo y validarlo con datos propios del operador.
+
+
+## Momento de observación
+- **Momento de observación:** el conjunto de datos representa un corte transversal. Cada fila describe a un cliente con los servicios, el contrato y la facturación que tenía en el momento del corte. No hay historial de cada cliente.
+- **Consecuencia:** el modelo *clasifica* clientes a partir de su perfil en el corte transversal; con estos datos no se puede verificar que prediga el futuro.
 
 
 ## Algoritmos Evaluados y Modelo Seleccionado
@@ -75,7 +87,7 @@ Por ello, se seleccionaron:
 
 ## Principales Resultados Obtenidos
 
-Sobre el conjunto de prueba independiente (`X_test`, 1,409 clientes no vistos):
+Sobre el conjunto de prueba independiente (`X_test`, 1,409 clientes no vistos del conjunto de ejemplo ficticio):
 
 * **Superación del Modelo Base:** El clasificador base (`DummyClassifier`) obtuvo un F1 y Recall de **0.00**. El modelo predictivo final alcanzó un **F1 de 0.579** y un **ROC-AUC de 0.843**.
 * **Detección Efectiva:** Identifica con éxito al **51.1% de los clientes en riesgo** (Recall = 0.511) con una precisión del **66.8%** (Precision = 0.668), superando ampliamente la nula capacidad de detección del modelo base.
