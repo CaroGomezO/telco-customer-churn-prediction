@@ -2,7 +2,19 @@
 
 > Aplicación reproducible para entrenar, versionar y desplegar el modelo de predicción de churn desarrollado en la Fase 1.
 
+## Integrantes
+
+* **Carolina Gómez Osorno** — [@CaroGomezO](https://github.com/CaroGomezO)
+* **Julian Esteban Hurtado Serna** — [@Julian-debug-s](https://github.com/Julian-debug-s)
+* **Emanuel López Franco** — [@ema28pro](https://github.com/ema28pro)
+
+Proyecto Integrador — Modelos y Simulación de Sistemas I (2026 II).
+
 ## Descripción
+
+**Problema:** predecir si un cliente de una empresa de telecomunicaciones abandonará el servicio (clasificación binaria; variable objetivo `Churn`).
+
+**Relación con la Fase 1:** se conservan el problema, los datos (`../fase-1/DatosCrudos.csv`) y el enfoque de modelado (Gradient Boosting) de la carpeta `fase-1/`, y se convierten en una aplicación con scripts, versionamiento de modelos, pruebas y Docker.
 
 Esta fase implementa el flujo de producción del modelo de churn:
 
@@ -19,6 +31,14 @@ El `Pipeline` de scikit-learn conserva el preprocesamiento junto con el modelo. 
 Como corrección de robustez de Fase 2, el pipeline incorpora imputación aprendida **solo con el conjunto de entrenamiento**: mediana para variables numéricas y moda para categóricas. Esta estrategia permite procesar valores faltantes sin fuga de información.
 
 El modelo usa explícitamente `GradientBoostingClassifier` con `learning_rate=0.1`, `max_depth=3` y `n_estimators=100`, equivalentes a la configuración seleccionada en Fase 1. Estos valores también se guardan en `metadata.json`.
+
+---
+
+## Alcance de los datos
+
+Los datos son el conjunto de ejemplo *Telco Customer Churn* de IBM, que describe una empresa de telecomunicaciones **ficticia** (ver «Alcance y Limitaciones de los Resultados» en `fase-1/README.md`). Las métricas de este modelo describen su desempeño sobre ese conjunto de ejemplo y **no** son evidencia sobre clientes reales de operadores colombianos ni de ninguna empresa real.
+
+La etiqueta `Churn` es una *foto* (corte transversal) cuyo horizonte es «el último mes» según la documentación de IBM, con una ambigüedad documentada en la Fase 1. La aplicación *clasifica* clientes a partir de su perfil; con estos datos no se puede verificar que prediga el futuro.
 
 ---
 
@@ -39,6 +59,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+**Python y versiones.** Se usa **Python 3.11** (el mismo del `Dockerfile`; probado con 3.11.18). Las versiones exactas están en `requirements.txt`: `numpy 1.26.4`, `pandas 2.2.2`, `scipy 1.13.1`, `scikit-learn 1.5.1`, `joblib 1.4.2` y `pytest 8.3.2`. Los modelos de `models/` se guardaron con estas versiones; cargarlos con otra versión de scikit-learn o de numpy puede dar avisos o fallar.
 
 El CSV etiquetado usado en el ejemplo está en `../fase-1/DatosCrudos.csv` (Linux/macOS) o `..\fase-1\DatosCrudos.csv` (Windows).
 
@@ -299,17 +321,73 @@ Las rutas de origen de los montajes corresponden a las carpetas del equipo anfit
 
 ## Versiones del modelo
 
-El directorio `models/` contiene varias versiones entrenadas:
+El directorio `models/` contiene las versiones entrenadas. Cada una tiene `modelo.joblib`, `metrics.json` y `metadata.json`:
 
-| Versión | Descripción | F1 | ROC-AUC |
-|---|---|---|---|
-| `v1` | Versión inicial (Fase 1 pre-corrección) | 0.579 | 0.843 |
-| `v2` | Versión con semilla alternativa (seed=7) | 0.622 | 0.86 |
-| `v3` | Versión con las correcciones de Fase 1 aplicadas (Pipeline en CV) | 0.579 | 0.843 |
+| Versión | Descripción | Semilla | F1 | ROC-AUC |
+|---|---|---|---|---|
+| `v1` | Semilla 42, partición 80/20 estratificada | 42 | 0.579 | 0.843 |
+| `v2` | Semilla 7 (otra partición) | 7 | 0.622 | 0.865 |
+| `v3` | Semilla 42, mismos parámetros que `v1` | 42 | 0.579 | 0.843 |
+| `V-docker` | Semilla 42, entrenada dentro del contenedor (ver «Contenerización con Docker») | 42 | 0.579 | 0.843 |
 
-**Nota:** las versiones `v1` y `v2` se entrenaron con la versión anterior del notebook de Fase 1. La versión `v3` es la que refleja el estado actual del proyecto, con el preprocesamiento integrado dentro de un Pipeline.
+**Cómo leer esta tabla:**
 
-> **Verificación pendiente:** los valores de F1 y ROC-AUC de `v1` y `v2` deben coincidir con sus respectivos `metrics.json`. Si `v2` (semilla 7) da valores distintos, actualizar esta tabla.
+- `v1`, `v3` y `V-docker` son prácticamente idénticas: mismos datos, parámetros y semilla (el modelo es determinista). Cambia el entorno o el código con el que se generó cada una.
+- `v2` usa otra semilla, y eso **cambia la partición** entrenamiento/prueba. Por eso su métrica **no es comparable** con la de las demás: un F1 más alto no significa un modelo mejor.
+- Todas se guardaron con Python 3.11 y las versiones de `requirements.txt` (scikit-learn 1.5.1). El ROC-AUC puede cambiar en el 5.º decimal al cambiar de versión de scikit-learn (se midieron diferencias de 0.00001 a 0.00004 entre las versiones 1.5.1 y 1.9.0); el resto de las métricas no cambió.
+- Las pruebas de `tests/test_contrato_entrada.py` comprueban que cada versión de `models/` carga en un proceso independiente sin avisos de versión.
+
+---
+
+## Resultados y comparación con el modelo base
+
+Métrica principal: **F1 de la clase `Churn = 1`**. El conjunto está desbalanceado (aproximadamente 73.5 % "No" y 26.5 % "Yes") y un modelo que nunca detecta abandonos igual tendría 73.5 % de accuracy, por eso el accuracy no sirve como criterio. Evaluación: partición 80/20 estratificada (5634 clientes de entrenamiento y 1409 de prueba) con semilla 42. El modelo base predice siempre la clase más frecuente («No»).
+
+| Métrica (prueba) | Modelo base | Modelo (`v1`) |
+|---|---|---|
+| accuracy | 0.735 | 0.803 |
+| precision | 0.000 | 0.668 |
+| recall | 0.000 | 0.511 |
+| F1 | 0.000 | 0.579 |
+| ROC-AUC | 0.500 | 0.843 |
+
+El modelo detecta cerca de la mitad de los clientes que se van (recall 0.511) con una precisión de 0.668; el modelo base no detecta ninguno. Los valores salen de `models/v1/metrics.json` (que guarda también las métricas del modelo base).
+
+---
+
+## Limitaciones conocidas
+
+- **Datos ficticios:** los resultados no son evidencia sobre clientes reales (ver «Alcance de los datos»).
+- **Etiqueta y horizonte:** el conjunto es una foto y el horizonte de `Churn` es ambiguo en la documentación de IBM.
+- **Una sola partición:** las métricas salen de una partición 80/20 con semilla fija. La comparación entre familias de modelos con validación cruzada está en el notebook de la Fase 1, y allí Gradient Boosting y la regresión logística no se distinguen de forma concluyente.
+- **Umbral fijo:** `predict.py` etiqueta con el umbral por defecto de 0.5. El análisis de umbral con costos (ilustrativos) está en el notebook de la Fase 1 y no se incorporó a la aplicación.
+- **Contrato de entrada:** `SeniorCitizen` solo admite `0` o `1`; las categorías no vistas en el entrenamiento se codifican con ceros (con aviso) y las columnas adicionales se ignoran.
+- **Reproducibilidad:** depende de las versiones fijadas en `requirements.txt`; cargar los modelos con otras versiones puede dar avisos o fallar, y el ROC-AUC puede variar en el 5.º decimal.
+- **Seguridad:** `joblib` ejecuta código al cargar un archivo; solo deben cargarse modelos generados por este proyecto.
+
+---
+
+## Correcciones respecto a la entrega anterior
+
+Cambios hechos después de la retroalimentación de la Fase 1:
+
+- **Flujo completo guardado:** la entrega de la Fase 1 guardaba solo el estimador, que recibía 45 columnas ya transformadas. Ahora `modelo.joblib` contiene el `Pipeline` (preprocesamiento + modelo) con el orden de columnas, y `predict.py` recibe las variables originales.
+- **Imputación sin fuga:** mediana (numéricas) y moda (categóricas) aprendidas solo con el entrenamiento; antes no había tratamiento de nulos en el flujo guardado.
+- **Separación antes de decidir variables (notebook de la Fase 1):** el `train_test_split` pasó al inicio del EDA y la decisión de eliminar `TotalCharges` se tomó solo con entrenamiento (la conclusión no cambió).
+- **Preprocesamiento dentro de la validación cruzada (notebook de la Fase 1):** el escalador y el codificador forman parte de un `Pipeline`, de modo que se reajustan en cada pliegue.
+- **Umbral con validación y costos ilustrativos** (notebook de la Fase 1).
+- **Alcance de los datos y horizonte de la etiqueta:** se documenta que los datos son de una empresa ficticia y que el horizonte de `Churn` es ambiguo.
+- **Versiones fijadas:** `requirements.txt` fija todas las librerías (incluidas `numpy` y `scipy`) y `v1` y `v2` se regeneraron con esas versiones, con Python 3.11.
+- **Pruebas de carga independiente y del contrato de entrada:** nuevas pruebas, y una celda en el notebook de la Fase 1 que carga el modelo guardado en un proceso de Python nuevo con clientes nuevos y categorías desconocidas.
+
+---
+
+## Fuentes consultadas
+
+- Conjunto de datos *Telco Customer Churn* (muestra de IBM publicada en Kaggle): https://www.kaggle.com/datasets/blastchar/telco-customer-churn
+- Documentación de IBM Cognos Analytics sobre esta muestra: https://www.ibm.com/docs/SSEP7J_11.1.0/com.ibm.swg.ba.cognos.ig_smples.doc/c_telco_dm_sam.html
+- Documentación de scikit-learn sobre `Pipeline` y `ColumnTransformer`: https://scikit-learn.org/stable/modules/compose.html
+- Documentación de scikit-learn sobre persistencia de modelos y sus limitaciones: https://scikit-learn.org/stable/model_persistence.html
 
 ---
 
@@ -322,17 +400,20 @@ fase-2/
 ├── models/
 │   ├── v1/
 │   ├── v2/
-│   └── v3/
+│   ├── v3/
+│   └── V-docker/
 ├── outputs/
 ├── tests/
 │   ├── test_pipeline.py
-│   └── test_predict.py
+│   ├── test_predict.py
+│   └── test_contrato_entrada.py
 ├── pipeline.py
 ├── train.py
 ├── inference.py
 ├── predict.py
 ├── requirements.txt
 ├── Dockerfile
+├── .dockerignore
 └── README.md
 ```
 
@@ -345,7 +426,8 @@ El proyecto incluye pruebas automatizadas con `pytest`:
 | Archivo | Qué prueba |
 |---|---|
 | `tests/test_pipeline.py` | Pipeline de entrenamiento: carga de datos, validación de columnas, preprocesamiento, entrenamiento, métricas, guardado y carga. |
-| `tests/test_predict.py` | Inferencia: contrato de entrada (columnas faltantes, tipos incorrectos, categorías desconocidas, celdas vacías), esquema de salida, casos especiales. |
+| `tests/test_predict.py` | Inferencia con modelos sintéticos: columnas faltantes, tipos incorrectos, categorías desconocidas, celdas vacías, esquema de salida, casos especiales. |
+| `tests/test_contrato_entrada.py` | Contrato de entrada sobre los **modelos entregados** en `models/`: las 18 columnas obligatorias (una prueba por columna), valores categóricos que conoce cada versión, `SeniorCitizen`, esquema de salida, clientes nuevos con categorías desconocidas en un proceso independiente, y que cada versión cargue sin avisos de versión de scikit-learn. |
 
 Ejecutar todas las pruebas:
 
@@ -353,7 +435,7 @@ Ejecutar todas las pruebas:
 python -m pytest
 ```
 
-**Resultado obtenido:** 21 pruebas pasan correctamente (`21 passed`).
+**Resultado obtenido:** 57 pruebas pasan correctamente (`57 passed`).
 
 ---
 
