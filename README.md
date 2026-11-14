@@ -27,6 +27,7 @@ La deserción de clientes representa uno de los mayores impactos sobre los ingre
 telco-customer-churn-prediction/
 ├── fase-1/   # Análisis exploratorio, modelado y selección del modelo (notebook)
 ├── fase-2/   # Scripts de entrenamiento y predicción, pruebas y Docker
+├── fase-3/   # API REST (Flask) para predecir y entrenar mediante solicitudes HTTP
 └── README.md
 ```
 
@@ -34,6 +35,7 @@ telco-customer-churn-prediction/
 |---|---|---|
 | **Fase 1** | EDA, limpieza, comparación de algoritmos, análisis de umbral y modelo final en notebook. | [`fase-1/README.md`](./fase-1/README.md) |
 | **Fase 2** | Aplicación reproducible: `train.py`, `predict.py`, versionamiento de modelos, pruebas con pytest y Dockerfile. | [`fase-2/README.md`](./fase-2/README.md) |
+| **Fase 3** | API REST: `GET /health`, `POST /predict` y `POST /train`, con validación de entradas, pruebas, cliente de prueba y Docker. | [`fase-3/README.md`](./fase-3/README.md) |
 
 Cada fase tiene su propio `requirements.txt` y sus instrucciones de ejecución. Los comandos deben ejecutarse desde la carpeta de la fase correspondiente.
 
@@ -41,7 +43,7 @@ Cada fase tiene su propio `requirements.txt` y sus instrucciones de ejecución. 
 
 * **Python 3.11**
 * Git
-* Docker Desktop (opcional, solo para la ejecución en contenedor de la Fase 2)
+* Docker Desktop (opcional, solo para la ejecución en contenedor de las Fases 2 y 3)
 
 ## Inicio Rápido
 
@@ -61,8 +63,18 @@ pip install -r requirements.txt
 python predict.py --model models/v1 --input data/ejemplo_prediccion.csv --output outputs/predicciones.csv
 ```
 
+Para levantar la API REST (Fase 3) con la misma versión del modelo:
+
+```bash
+cd ../fase-3
+python -m pip install -r requirements.txt
+python api.py                                   # API en http://localhost:8000
+python cliente_prueba.py                        # en otra terminal: /health, /predict válido y /predict inválido
+```
+
 Para consultar la guía detallada de cada etapa:
 
+* **API REST, validación de entradas y Docker (Fase 3):** consulta [`fase-3/README.md`](./fase-3/README.md).
 * **Entrenar nuevos modelos, pruebas y Docker (Fase 2):** consulta [`fase-2/README.md`](./fase-2/README.md).
 * **Revisar el análisis exploratorio y selección de modelos en notebook (Fase 1):** consulta [`fase-1/README.md`](./fase-1/README.md).
 
