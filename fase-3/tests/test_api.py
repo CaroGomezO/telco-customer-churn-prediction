@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 
 import pytest
-import sklearn
 
 import cliente_prueba
 from api import create_app
 from config import Settings
+from conftest import requiere_entorno_fijado
 from inference import load_bundle
 from pipeline import NUMERIC_COLUMNS
 from validation import validate_record
@@ -200,7 +200,7 @@ def test_predict_categoria_no_vista_se_procesa_y_se_advierte(client, registro_va
     response = client.post("/predict", json={**registro_valido, "Contract": "Weekly"})
     assert response.status_code == 200
     assert response.get_json()["categorias_no_vistas"] == {"Contract": ["Weekly"]}
-    
+
 
 def test_predict_usa_la_version_configurada(settings, registro_valido):
     settings_v2 = Settings(settings.models_dir, "v2", settings.train_data_path)
@@ -368,17 +368,7 @@ def test_los_json_de_ejemplo_de_la_documentacion_son_coherentes():
     assert [p["campo"] for p in validate_record(invalido, columnas)[1]] == ["tenure"]
 
 
-def _scikit_learn_fijado() -> str | None:
-    for linea in (FASE3 / "requirements.txt").read_text(encoding="utf-8").splitlines():
-        if linea.lower().startswith("scikit-learn=="):
-            return linea.split("==")[1].strip()
-    return None
-
-
-@pytest.mark.skipif(
-    sklearn.__version__ != _scikit_learn_fijado(),
-    reason="Los modelos entregados se guardaron con la versión de scikit-learn fijada en requirements.txt.",
-)
+@requiere_entorno_fijado
 @pytest.mark.parametrize("version", ["v1", "v2"])
 def test_la_api_predice_con_los_modelos_entregados(version):
     entregados = Settings(FASE3 / "models", version, FASE3.parent / "fase-1" / "DatosCrudos.csv")
@@ -394,10 +384,7 @@ def test_la_api_predice_con_los_modelos_entregados(version):
         assert body["customerID"] == fila["customerID"]
 
 
-@pytest.mark.skipif(
-    sklearn.__version__ != _scikit_learn_fijado(),
-    reason="Los modelos entregados se guardaron con la versión de scikit-learn fijada en requirements.txt.",
-)
+@requiere_entorno_fijado
 def test_la_api_reproduce_la_prediccion_registrada_en_la_fase_2():
     entregados = Settings(FASE3 / "models", "v1", FASE3.parent / "fase-1" / "DatosCrudos.csv")
     with open(FASE3 / "data" / "ejemplo_prediccion.csv", newline="", encoding="utf-8") as handle:
