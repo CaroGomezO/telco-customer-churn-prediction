@@ -6,7 +6,6 @@
 
 * **Carolina Gómez Osorno** — [@CaroGomezO](https://github.com/CaroGomezO)
 * **Julian Esteban Hurtado Serna** — [@Julian-debug-s](https://github.com/Julian-debug-s)
-* **Emanuel López Franco** — [@ema28pro](https://github.com/ema28pro)
 
 Proyecto Integrador — Modelos y Simulación de Sistemas I (2026 II).
 
@@ -59,7 +58,9 @@ fase-4/
 │   ├── registro_prueba.csv # Ensayo 1 del Reporte (API local): 3 solicitudes, 33,3 %
 │   └── registro_docker.csv # Ensayo 2 del Reporte (Docker, v3 → v1): 8 solicitudes, 25,0 %
 ├── tests/
+│   ├── referencia/         # Predicciones registradas de v1, v2 y v3
 │   ├── test_api.py         # Pruebas de la Fase 3
+│   ├── test_versiones.py   # Pruebas de la Fase 3, extendidas a v3
 │   └── test_registro.py    # Pruebas de la Fase 4
 ├── conftest.py, pytest.ini, requirements.txt, Dockerfile, .dockerignore, .gitignore
 └── README.md
@@ -272,7 +273,7 @@ python -m pip install -r requirements.txt
 python -m pytest
 ```
 
-**Resultado esperado:** `81 passed`. Las pruebas escriben el registro en directorios temporales y no tocan `logs/`.
+**Resultado esperado:** `98 passed`. Las pruebas escriben el registro en directorios temporales y no tocan `logs/`.
 
 ### Paso 3. Partir de un registro vacío
 
@@ -429,6 +430,25 @@ python metricas.py
 
 ---
 
+## Datos de entrada de `POST /predict`
+
+El contrato de entrada es el de la Fase 3. La API recibe un objeto JSON con las **18 variables predictoras**; `customerID` es opcional y las claves adicionales se ignoran. Los casos especiales (nulos, categorías nuevas, claves adicionales) están descritos en `fase-3/README.md`.
+
+| Campo | Tipo JSON | Valores admitidos | Unidad o significado |
+|---|---|---|---|
+| `gender` | texto | `Female`, `Male` | Género registrado del cliente. |
+| `SeniorCitizen` | número | `0` o `1` | `1` si el cliente es adulto mayor, `0` si no (sin unidad). |
+| `Partner`, `Dependents`, `PhoneService`, `PaperlessBilling` | texto | `Yes`, `No` | Si el cliente tiene pareja, dependientes, servicio telefónico y facturación sin papel, respectivamente. |
+| `tenure` | número entero | `0` o más | **Meses** completos como cliente. |
+| `MultipleLines` | texto | `Yes`, `No`, `No phone service` | Si tiene varias líneas telefónicas; `No phone service` si no tiene teléfono. |
+| `InternetService` | texto | `DSL`, `Fiber optic`, `No` | Tipo de conexión a internet. |
+| `OnlineSecurity`, `OnlineBackup`, `DeviceProtection`, `TechSupport`, `StreamingTV`, `StreamingMovies` | texto | `Yes`, `No`, `No internet service` | Si contrató cada servicio adicional; `No internet service` si no tiene internet. |
+| `Contract` | texto | `Month-to-month`, `One year`, `Two year` | Tipo de contrato. |
+| `PaymentMethod` | texto | `Electronic check`, `Mailed check`, `Bank transfer (automatic)`, `Credit card (automatic)` | Método de pago. |
+| `MonthlyCharges` | número | `0` o más | Cargo **mensual** facturado. La fuente del conjunto de datos no especifica la moneda: el valor debe enviarse en la misma unidad de los datos de entrenamiento. |
+
+---
+
 ## Configuración (variables de entorno)
 
 Las mismas de la Fase 3 (ver `fase-3/README.md`), con estos cambios:
@@ -446,7 +466,7 @@ Las mismas de la Fase 3 (ver `fase-3/README.md`), con estos cambios:
 python -m pytest
 ```
 
-Las 62 pruebas de la Fase 3 se mantienen (`tests/test_api.py`; solo cambia el valor por defecto esperado de `MODEL_VERSION`). Se agregan 19 en `tests/test_registro.py`:
+Se mantienen las pruebas de la Fase 3 (`tests/test_api.py` y `tests/test_versiones.py`, 79 en total). Hay dos diferencias: el valor por defecto esperado de `MODEL_VERSION` es `v3`, y las pruebas de versiones cubren también `v3`, con su referencia en `tests/referencia/predicciones_v3.csv`, tomada de `fase-2/outputs/predicciones_v3.csv`. Se agregan 19 en `tests/test_registro.py`:
 
 | Grupo | Qué comprueba |
 |---|---|
