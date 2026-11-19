@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 
 import pytest
-import sklearn
 
 import cliente_prueba
 from api import create_app
 from config import Settings
+from conftest import requiere_entorno_fijado
 from inference import load_bundle
 from pipeline import NUMERIC_COLUMNS
 from validation import validate_record
@@ -200,7 +200,7 @@ def test_predict_categoria_no_vista_se_procesa_y_se_advierte(client, registro_va
     response = client.post("/predict", json={**registro_valido, "Contract": "Weekly"})
     assert response.status_code == 200
     assert response.get_json()["categorias_no_vistas"] == {"Contract": ["Weekly"]}
-    
+
 
 def test_predict_usa_la_version_configurada(settings, registro_valido):
     settings_v2 = Settings(settings.models_dir, "v2", settings.train_data_path)
@@ -241,7 +241,6 @@ def test_configuracion_desde_variables_de_entorno():
     assert (settings.models_dir, settings.model_version, settings.seed) == (Path("otros"), "v7", 7)
     assert (settings.target, settings.git_commit) == ("Salida", "abc1234")
     por_defecto = Settings.from_env({})
-    # Fase 4: la versión activa por defecto es v3 (creada con /train); v1 sigue disponible con MODEL_VERSION=v1.
     assert (por_defecto.model_version, por_defecto.seed, por_defecto.git_commit) == ("v3", 42, None)
     assert por_defecto.log_path == Path("logs/predicciones.csv")
     with pytest.raises(ValueError):
@@ -370,17 +369,7 @@ def test_los_json_de_ejemplo_de_la_documentacion_son_coherentes():
     assert [p["campo"] for p in validate_record(invalido, columnas)[1]] == ["tenure"]
 
 
-def _scikit_learn_fijado() -> str | None:
-    for linea in (FASE4 / "requirements.txt").read_text(encoding="utf-8").splitlines():
-        if linea.lower().startswith("scikit-learn=="):
-            return linea.split("==")[1].strip()
-    return None
-
-
-@pytest.mark.skipif(
-    sklearn.__version__ != _scikit_learn_fijado(),
-    reason="Los modelos entregados se guardaron con la versión de scikit-learn fijada en requirements.txt.",
-)
+@requiere_entorno_fijado
 @pytest.mark.parametrize("version", ["v1", "v2"])
 def test_la_api_predice_con_los_modelos_entregados(version):
     entregados = Settings(FASE4 / "models", version, FASE4.parent / "fase-1" / "DatosCrudos.csv")
@@ -396,10 +385,7 @@ def test_la_api_predice_con_los_modelos_entregados(version):
         assert body["customerID"] == fila["customerID"]
 
 
-@pytest.mark.skipif(
-    sklearn.__version__ != _scikit_learn_fijado(),
-    reason="Los modelos entregados se guardaron con la versión de scikit-learn fijada en requirements.txt.",
-)
+@requiere_entorno_fijado
 def test_la_api_reproduce_la_prediccion_registrada_en_la_fase_2():
     entregados = Settings(FASE4 / "models", "v1", FASE4.parent / "fase-1" / "DatosCrudos.csv")
     with open(FASE4 / "data" / "ejemplo_prediccion.csv", newline="", encoding="utf-8") as handle:
