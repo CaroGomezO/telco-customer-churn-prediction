@@ -35,7 +35,7 @@ El registro JSON recibido se convierte en una tabla de una fila con las columnas
 | La validación de valores es **un poco más estricta que la del CSV**: `tenure` y `MonthlyCharges` no pueden ser negativos, `tenure` debe ser entero, no se aceptan números escritos como texto (`"12"`), booleanos ni textos vacíos. | En JSON los tipos son explícitos: el enunciado pide que un número se envíe como número y una categoría como texto. Los límites ya figuran en el esquema documentado de la Fase 2 (`tenure`: entero de 0 o más). |
 | Una **categoría no vista** en el entrenamiento **no se rechaza**: se codifica con ceros y se informa en `categorias_no_vistas`. | Es el contrato documentado de la Fase 2 (`OneHotEncoder(handle_unknown="ignore")` con aviso). La API se comporta igual que `predict.py`. |
 | Los módulos de la Fase 2 (`pipeline.py`, `inference.py`, `train.py`, `predict.py`) **se copian** a `fase-3/`. | Cada fase debe poder construirse con `docker build` desde su propia carpeta. Para que la copia no se desincronice, la prueba `test_los_modulos_reutilizados_son_identicos_a_los_de_la_fase_2` verifica que sean idénticos a los de `fase-2/`. |
-| `fase-3/models/` contiene **copias de `v1` y `v2`** de la Fase 2 (mismos archivos). | Así `POST /train` crea versiones nuevas sin modificar la carpeta entregada en la Fase 2, y la Fase 4 puede usar `v1`, `v2` y la versión creada con `/train`. |
+| `fase-3/models/` contiene **copias de `v1` y `v2`** de la Fase 2 (mismos archivos); `v3` y `V-docker` permanecen en `fase-2/models/` como referencia. | Así `POST /train` crea versiones nuevas sin modificar la carpeta entregada en la Fase 2, y la Fase 4 puede usar `v1`, `v2` y la versión creada con `/train`. |
 | El contenedor usa **gunicorn** (no el servidor de desarrollo de Flask), con un solo proceso y 4 hilos. | El servidor de desarrollo no es apto para un contenedor. Un solo proceso mantiene en memoria el candado de `/train` y la caché del modelo. |
 | **`POST /train` responde `201`**, devuelve `409` si ya hay un entrenamiento en curso y `503` si no encuentra los datos. | Evitar entrenamientos simultáneos impide que dos solicitudes compitan por el mismo identificador. |
 | La **versión activa no cambia sola** después de `/train`; se cambia con `MODEL_VERSION` y reiniciando. | Evita activar un modelo sin revisarlo. |
@@ -65,7 +65,9 @@ fase-3/
 │   ├── v1/                 # modelo.joblib, metrics.json, metadata.json (copia de la Fase 2)
 │   └── v2/                 # ídem
 ├── tests/
-│   └── test_api.py
+│   ├── test_api.py         # Pruebas de la API (rutas, validación, nulos, 503, /train)
+│   ├── test_versiones.py   # Continuidad con la Fase 2: esquema por versión, procesos independientes, predicciones de referencia
+│   └── referencia/         # Predicciones de la Fase 2 para el CSV de ejemplo (v1 y v2)
 ├── conftest.py             # Fixtures de las pruebas
 ├── pytest.ini
 ├── requirements.txt
@@ -99,15 +101,17 @@ Esta guía recorre la ejecución completa del proyecto: primero **sin Docker** (
 * **Git**, opcional: solo se usa para anotar el commit del código en la imagen.
 * La carpeta `fase-1/` junto a `fase-3/`: contiene `DatosCrudos.csv`, que usa `POST /train`.
 
-Los comandos se ejecutan desde la carpeta `fase-3` del repositorio:
+Obtención del repositorio y ubicación en `fase-3` (si el repositorio ya está clonado, basta con el `cd`, ejecutado desde la carpeta que contiene el repositorio):
 
 **Windows (PowerShell):**
 ```powershell
+git clone https://github.com/CaroGomezO/telco-customer-churn-prediction.git
 cd telco-customer-churn-prediction\fase-3
 ```
 
 **Linux / macOS (Bash):**
 ```bash
+git clone https://github.com/CaroGomezO/telco-customer-churn-prediction.git
 cd telco-customer-churn-prediction/fase-3
 ```
 
@@ -135,7 +139,7 @@ python -m pip install -r requirements.txt
 python -m pytest
 ```
 
-**Resultado esperado:** `62 passed`, sin pruebas fallidas ni omitidas. No se requiere que la API esté en marcha. Tres de las pruebas cargan los modelos entregados y solo se ejecutan con la versión de scikit-learn fijada en `requirements.txt` (1.5.1); con otra versión se muestran como omitidas (`skipped`).
+**Resultado esperado:** `74 passed`, sin pruebas fallidas ni omitidas. No se requiere que la API esté en marcha. Nueve de las pruebas cargan los modelos entregados y solo se ejecutan con la versión de scikit-learn fijada en `requirements.txt` (1.5.1); con otra versión se muestran como omitidas (`skipped`).
 
 ### Paso 3. API sin Docker (dos terminales)
 
@@ -157,10 +161,18 @@ python cliente_prueba.py
 * `POST /predict` con HTTP 200: cliente `0464-WJTKO`, `"prediccion": "No"`, `"probabilidad_churn": 0.006983` y `"version": "v1"`.
 * `POST /predict` sin `tenure` con HTTP 422 y el mensaje `tenure: campo obligatorio ausente`.
 
-Las mismas solicitudes con curl (en PowerShell se escribe `curl.exe`; en Bash, `curl`):
-```bash
+Las mismas solicitudes con curl:
+
+**Windows (PowerShell)** (se usa `curl.exe` porque `curl` es un alias de otro comando):
+```powershell
 curl.exe http://localhost:8000/health
 curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud.json"
+```
+
+**Linux / macOS (Bash):**
+```bash
+curl http://localhost:8000/health
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @data/ejemplo_solicitud.json
 ```
 
 La API se detiene con `Ctrl+C` en la terminal 1. En este paso no se entrena: `POST /train` se comprueba en el paso 6.
@@ -270,26 +282,66 @@ docker stop churn-api
 
 ### Paso 8. Comprobación de los errores
 
-Con el contenedor arrancado como en el paso 4 (versión `v1`):
+Arranque de la API en Docker con la versión `v1` (se omite si ya está en ejecución con `v1`):
 
+**Windows (PowerShell):**
+```powershell
+docker run --rm -d --name churn-api -p 8000:8000 `
+  -v "${PWD}/models:/app/models" `
+  -v "${PWD}/../fase-1:/data:ro" `
+  modelos-fase3:1.0
+```
+
+**Linux / macOS (Bash):**
 ```bash
-# 422: falta "tenure" (el mensaje nombra el campo)
-curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud_invalida.json"
+docker run --rm -d --name churn-api -p 8000:8000 \
+  -v "$PWD/models:/app/models" \
+  -v "$PWD/../fase-1:/data:ro" \
+  modelos-fase3:1.0
+```
+Se espera a que `docker ps` muestre `(healthy)`.
 
-# 400: el cuerpo no es un JSON válido (se envía un archivo que no es JSON)
+**422** (falta `tenure`; el mensaje nombra el campo) y **400** (el cuerpo no es un JSON válido: se envía `pytest.ini`):
+
+**Windows (PowerShell):**
+```powershell
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud_invalida.json"
 curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@pytest.ini"
 ```
-(En Bash se escribe `curl` en lugar de `curl.exe`.)
 
+**Linux / macOS (Bash):**
+```bash
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @data/ejemplo_solicitud_invalida.json
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @pytest.ini
+```
 **Resultado esperado:** el primero responde `422` con `entrada_invalida` y el segundo `400` con `json_invalido`.
 
-Para el **503**, el contenedor se arranca con una versión inexistente (`-e MODEL_VERSION=v99`, mismo comando del paso 7) y se envía una solicitud válida:
-```bash
-curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud.json"
-```
-**Resultado esperado:** `503` con `modelo_no_disponible` y la lista de versiones disponibles.
+**503** (versión inexistente): se detiene el contenedor, se arranca con `MODEL_VERSION=v99`, se envía una solicitud válida y se detiene de nuevo:
 
-Al terminar, el contenedor se detiene con `docker stop churn-api`; al haberse iniciado con `--rm`, se elimina y los archivos de `models/` permanecen.
+**Windows (PowerShell):**
+```powershell
+docker stop churn-api
+docker run --rm -d --name churn-api -p 8000:8000 -e MODEL_VERSION=v99 `
+  -v "${PWD}/models:/app/models" `
+  -v "${PWD}/../fase-1:/data:ro" `
+  modelos-fase3:1.0
+Start-Sleep -Seconds 8
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud.json"
+docker stop churn-api
+```
+
+**Linux / macOS (Bash):**
+```bash
+docker stop churn-api
+docker run --rm -d --name churn-api -p 8000:8000 -e MODEL_VERSION=v99 \
+  -v "$PWD/models:/app/models" \
+  -v "$PWD/../fase-1:/data:ro" \
+  modelos-fase3:1.0
+sleep 8
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @data/ejemplo_solicitud.json
+docker stop churn-api
+```
+**Resultado esperado:** `503` con `modelo_no_disponible` y la lista de versiones disponibles. Los contenedores se inician con `--rm`: al detenerse se eliminan y los archivos de `models/` permanecen.
 
 ---
 
@@ -323,44 +375,42 @@ curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -
 }'
 ```
 
-### Opción 2. Archivo JSON editado y enviado con curl
+### Opción 2. Archivo JSON derivado del ejemplo y enviado con curl
 
-Se parte del ejemplo, se modifican los valores y se envía el archivo (en PowerShell se escribe `curl.exe`; en Bash, `curl`):
+El primer comando crea una copia de `data/ejemplo_solicitud.json` con `tenure` en `2` y contrato mensual, en la carpeta temporal del sistema (fuera del repositorio); el segundo la envía. Para otros valores se cambian los textos del reemplazo.
 
 **Windows (PowerShell):**
 ```powershell
-Copy-Item data\ejemplo_solicitud.json mi_cliente.json
-notepad mi_cliente.json
-curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@mi_cliente.json"
+(Get-Content data\ejemplo_solicitud.json -Raw) -replace '"tenure": 72','"tenure": 2' -replace '"Contract": "Two year"','"Contract": "Month-to-month"' | Set-Content "$env:TEMP\mi_cliente.json"
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@$env:TEMP\mi_cliente.json"
 ```
 
 **Linux / macOS (Bash):**
 ```bash
-cp data/ejemplo_solicitud.json mi_cliente.json
-nano mi_cliente.json
-curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @mi_cliente.json
+sed -e 's/"tenure": 72/"tenure": 2/' -e 's/"Contract": "Two year"/"Contract": "Month-to-month"/' data/ejemplo_solicitud.json > /tmp/mi_cliente.json
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @/tmp/mi_cliente.json
 ```
 
-### Opción 3. Clientes propios en un CSV
+### Opción 3. Clientes de un CSV
 
-Un CSV con las mismas columnas que `data/ejemplo_prediccion.csv` permite enviar una de sus filas con el cliente de prueba; `--fila` es el número de la fila, empezando en 0:
+`data/ejemplo_prediccion.csv` contiene 8 clientes. El cliente de prueba envía una de sus filas; `--fila` es el número de la fila, de 0 a 7:
 
 ```bash
-python cliente_prueba.py --input mis_clientes.csv --fila 0
+python cliente_prueba.py --input data/ejemplo_prediccion.csv --fila 3
 ```
 
-Además de la predicción, el cliente repite la solicitud sin `tenure` para comprobar el rechazo; es su comportamiento normal.
+`--input` admite cualquier CSV con las mismas columnas que `data/ejemplo_prediccion.csv`. Además de la predicción, el cliente repite la solicitud sin `tenure` para comprobar el rechazo; es su comportamiento normal.
 
-Para predecir **muchos clientes a la vez** se usa el script de la Fase 2, que genera un CSV con una predicción por fila:
+Para predecir **todas las filas a la vez** se usa el script de la Fase 2, que genera un CSV con una predicción por fila, en el mismo orden (la carpeta `outputs/` se crea si no existe):
 
 **Windows (PowerShell):**
 ```powershell
-python predict.py --model models\v1 --input mis_clientes.csv --output outputs\resultado.csv
+python predict.py --model models\v1 --input data\ejemplo_prediccion.csv --output outputs\predicciones_v1.csv
 ```
 
 **Linux / macOS (Bash):**
 ```bash
-python predict.py --model models/v1 --input mis_clientes.csv --output outputs/resultado.csv
+python predict.py --model models/v1 --input data/ejemplo_prediccion.csv --output outputs/predicciones_v1.csv
 ```
 
 ### Reglas de los datos
@@ -469,20 +519,25 @@ Devuelve siempre HTTP 200 mientras la API esté en ejecución, aunque el modelo 
 
 Recibe un objeto JSON con las **18 variables predictoras**; `customerID` es opcional (solo se devuelve en la respuesta) y las claves adicionales, como `TotalCharges`, se ignoran. La variable objetivo `Churn` no es necesaria.
 
-| Campo | Tipo JSON | Valores admitidos |
-|---|---|---|
-| `gender` | texto | `Female`, `Male` |
-| `SeniorCitizen` | número | `0` o `1` |
-| `Partner`, `Dependents`, `PhoneService`, `PaperlessBilling` | texto | `Yes`, `No` |
-| `tenure` | número entero | meses como cliente (0 o más) |
-| `MultipleLines` | texto | `Yes`, `No`, `No phone service` |
-| `InternetService` | texto | `DSL`, `Fiber optic`, `No` |
-| `OnlineSecurity`, `OnlineBackup`, `DeviceProtection`, `TechSupport`, `StreamingTV`, `StreamingMovies` | texto | `Yes`, `No`, `No internet service` |
-| `Contract` | texto | `Month-to-month`, `One year`, `Two year` |
-| `PaymentMethod` | texto | `Electronic check`, `Mailed check`, `Bank transfer (automatic)`, `Credit card (automatic)` |
-| `MonthlyCharges` | número | cargo mensual (0 o más) |
+| Campo | Tipo JSON | Valores admitidos | Unidad o significado |
+|---|---|---|---|
+| `gender` | texto | `Female`, `Male` | Género registrado del cliente. |
+| `SeniorCitizen` | número | `0` o `1` | `1` si el cliente es adulto mayor, `0` si no (sin unidad). |
+| `Partner`, `Dependents`, `PhoneService`, `PaperlessBilling` | texto | `Yes`, `No` | Si el cliente tiene pareja, dependientes, servicio telefónico y facturación sin papel, respectivamente. |
+| `tenure` | número entero | `0` o más | **Meses** completos como cliente. |
+| `MultipleLines` | texto | `Yes`, `No`, `No phone service` | Si tiene varias líneas telefónicas; `No phone service` si no tiene teléfono. |
+| `InternetService` | texto | `DSL`, `Fiber optic`, `No` | Tipo de conexión a internet. |
+| `OnlineSecurity`, `OnlineBackup`, `DeviceProtection`, `TechSupport`, `StreamingTV`, `StreamingMovies` | texto | `Yes`, `No`, `No internet service` | Si contrató cada servicio adicional; `No internet service` si no tiene internet. |
+| `Contract` | texto | `Month-to-month`, `One year`, `Two year` | Tipo de contrato. |
+| `PaymentMethod` | texto | `Electronic check`, `Mailed check`, `Bank transfer (automatic)`, `Credit card (automatic)` | Método de pago. |
+| `MonthlyCharges` | número | `0` o más | Cargo **mensual** facturado. La fuente del conjunto de datos no especifica la moneda: el valor debe enviarse en la misma unidad de los datos de entrenamiento, porque el modelo lo estandariza con la media y la desviación aprendidas en ese entrenamiento. |
 
-Para representar un dato faltante se envía `null` en esa clave; el modelo lo imputa con la mediana (numéricas) o la moda (categóricas) aprendidas en el entrenamiento. **La clave debe estar presente.**
+Tratamiento de los casos especiales (el mismo contrato de la Fase 2):
+
+* **Datos faltantes:** se envía `null` en esa clave; el modelo lo imputa con la mediana (numéricas) o la moda (categóricas) aprendidas en el entrenamiento, y la respuesta lo informa en `nulos_imputados`. **La clave debe estar presente**: una clave ausente se rechaza.
+* **Categorías nuevas** (un texto que el modelo no vio al entrenar): no producen error; se codifican con ceros y la respuesta las informa en `categorias_no_vistas`.
+* **Claves adicionales** (por ejemplo `TotalCharges`): se ignoran. El orden de las claves en el JSON no importa.
+* **Versión y correspondencia con la observación:** cada solicitud contiene **una** observación y la respuesta contiene **una** predicción, por lo que el orden no es ambiguo. `version` identifica la versión del modelo que produjo el resultado y `customerID` (opcional) se devuelve para identificar la observación. Para varias observaciones en un solo paso, con una fila de salida por cada fila de entrada y en el mismo orden, se usa `predict.py` (Fase 2).
 
 **Solicitud** (`data/ejemplo_solicitud.json`, primera fila de `data/ejemplo_prediccion.csv`):
 
@@ -602,6 +657,29 @@ Para comprobarlo manualmente basta listar `models/` (aparece `v3/`) o consultar 
 
 ---
 
+## Versiones del modelo y trazabilidad
+
+`fase-3/models/` contiene copias exactas de `v1` y `v2` de la Fase 2; `v3` y `V-docker` permanecen en `fase-2/models/`. Cada versión tiene `modelo.joblib`, `metrics.json` y `metadata.json`. Dada la `version` de una respuesta de `POST /predict`, su carpeta contiene el modelo, las métricas, el entorno y el commit del código con el que se generó.
+
+| Versión | Ubicación | Descripción | Semilla | F1 | ROC-AUC | Datos (entrenamiento / prueba) | Entorno | Commit del código |
+|---|---|---|---|---|---|---|---|---|
+| `v1` | `fase-3/models/v1` (copia de `fase-2/models/v1`) | Partición 80/20 estratificada | 42 | 0.579 | 0.843 | 5634 / 1409 | Python 3.11.18, scikit-learn 1.5.1 | `6837a3e` |
+| `v2` | `fase-3/models/v2` (copia de `fase-2/models/v2`) | Otra semilla, otra partición | 7 | 0.622 | 0.865 | 5634 / 1409 | Python 3.11.18, scikit-learn 1.5.1 | `6837a3e` |
+| `v3` | `fase-2/models/v3` | Mismos parámetros y semilla que `v1` | 42 | 0.579 | 0.843 | 5634 / 1409 | Python 3.11.18, scikit-learn 1.5.1 | `6837a3e` |
+| `V-docker` | `fase-2/models/V-docker` | Entrenada dentro del contenedor de la Fase 2 | 42 | 0.579 | 0.843 | 5634 / 1409 | Python 3.11.18, scikit-learn 1.5.1 | no disponible (la imagen no incluía `.git`) |
+| Creadas con `POST /train` | `models/v<N>` (la numeración sigue a la última versión existente) | Entrenamiento con `SEED`, `TEST_SIZE` y `TRAIN_DATA_PATH` de la configuración | `SEED` (42 por defecto) | ver `metrics.json` | ver `metrics.json` | ver `metadata.json` | Python 3.11 de la imagen y versiones de `requirements.txt` | hash indicado con `--build-arg GIT_COMMIT`; `no-disponible` si no se indicó |
+
+La información de `v1`, `v2`, `v3` y `V-docker` es la registrada en sus archivos `metadata.json` y `metrics.json` (F1 y ROC-AUC sobre el conjunto de prueba, clase `Churn = 1`). El código de la API se identifica con la etiqueta de Git `entrega-3`, distinta de las versiones del modelo.
+
+**Cómo leer las métricas:**
+
+* `v1`, `v3` y `V-docker` son prácticamente idénticas: mismos datos, parámetros y semilla (el modelo es determinista). Cambia el entorno o el código con el que se generó cada una.
+* `v2` usa otra semilla, y eso **cambia la partición** entrenamiento/prueba. Su métrica **no es comparable** con la de las demás: un F1 más alto no significa un modelo mejor.
+* Una versión creada con `POST /train` con la misma `SEED` y los mismos datos reproduce las métricas de `v1`. Si cambian `SEED`, `TEST_SIZE` o el CSV, la diferencia de métricas se debe a la partición o a los datos, y no debe interpretarse como mejora del modelo.
+* El ROC-AUC puede variar en el quinto decimal con la versión de scikit-learn (en la Fase 2 se midieron diferencias de 0.00001 a 0.00004 entre las versiones 1.5.1 y 1.9.0); por eso las predicciones de referencia se comparan con 6 decimales y con las versiones de `requirements.txt`.
+
+---
+
 ## Cliente de prueba y ejemplos con curl
 
 Con la API en marcha, el cliente envía `GET /health`, una predicción válida con un cliente real de `data/ejemplo_prediccion.csv` y la misma solicitud sin `tenure` (que debe ser rechazada). Termina con código `0` si todo salió como se espera.
@@ -705,7 +783,7 @@ Desde `fase-3`, en cualquier terminal:
 python -m pytest
 ```
 
-Las pruebas usan el cliente de pruebas de Flask (no abren puertos), entrenan con `pipeline.train_and_save` un modelo pequeño sobre datos sintéticos en directorios temporales (sin descargas ni cambios en `models/`) y no requieren que la API esté en marcha.
+Las pruebas de la API usan el cliente de pruebas de Flask y entrenan con `pipeline.train_and_save` un modelo pequeño sobre datos sintéticos en directorios temporales (sin descargas ni cambios en `models/`). Una de ellas arranca `python api.py` en un proceso independiente, en un puerto libre de `127.0.0.1`. No requieren que la API esté en marcha.
 
 | Grupo | Qué comprueba |
 |---|---|
@@ -716,9 +794,12 @@ Las pruebas usan el cliente de pruebas de Flask (no abren puertos), entrenan con
 | Versiones y `503` | la versión se toma de `MODEL_VERSION`; versión inexistente o archivo dañado → 503 con las versiones disponibles; una versión no puede ser una ruta. |
 | `/train` | crea `v3` (y luego `v4`) con sus tres archivos, deja intactas `v1` y `v2` (comparación por hash), no cambia la versión activa; sin datos → 503 y sin carpeta nueva; datos inválidos → 500; entrenamiento simultáneo → 409; registro del commit cuando no hay `.git`. |
 | Errores generales | rutas y métodos inexistentes responden JSON; crear la aplicación no lee modelos ni datos. |
-| Coherencia con la entrega | los módulos copiados son idénticos a los de `fase-2/`; el CSV y los JSON de ejemplo cumplen el esquema de `v1` y `v2`; con los **modelos entregados** (`v1` y `v2`) la API predice las 8 filas del CSV y reproduce la probabilidad de `fase-2/outputs/predicciones.csv`. |
+| Coherencia con la entrega | los módulos copiados son idénticos a los de `fase-2/`; el CSV y los JSON de ejemplo cumplen el esquema de `v1` y `v2`. |
+| Esquema por versión | el README documenta cada columna requerida y cada valor admitido; `v1` y `v2` exigen exactamente las 18 columnas del contrato; los valores documentados coinciden con las categorías que aprendió cada modelo; las carpetas de las versiones entregadas conservan modelo, métricas y metadatos. |
+| Procesos independientes | cada versión entregada carga y predice en un proceso nuevo sin avisos de versión de scikit-learn; la API arranca como proceso independiente (`python api.py`) y responde por HTTP (`/health`, `/predict` válido y rechazo por campo ausente). |
+| Predicciones de referencia | las 8 filas de `data/ejemplo_prediccion.csv`, con `v1` y con `v2`, deben dar la misma etiqueta y la misma probabilidad (6 decimales) que en la Fase 2 (`tests/referencia/`, copias de `fase-2/outputs/predicciones.csv` y `predicciones_v2.csv`). Si el código cambia y alguna predicción varía, la prueba falla y señala un cambio no previsto. |
 
-El conjunto tiene 62 pruebas. Las 3 que cargan los modelos entregados solo se ejecutan si la versión de scikit-learn instalada coincide con la fijada en `requirements.txt` (con otra versión, `pytest` las marca como omitidas e indica el motivo), porque un `.joblib` solo es cargable de forma fiable con la versión con la que se guardó.
+El conjunto tiene 74 pruebas. Las 9 que cargan los modelos entregados (`v1` y `v2`) solo se ejecutan si la versión de scikit-learn instalada coincide con la fijada en `requirements.txt` (con otra versión, `pytest` las marca como omitidas e indica el motivo), porque un `.joblib` solo es cargable de forma fiable con la versión con la que se guardó.
 
 ---
 
