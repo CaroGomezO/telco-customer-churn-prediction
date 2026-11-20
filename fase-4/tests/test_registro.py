@@ -91,6 +91,11 @@ def test_metodo_no_permitido_en_predict_tambien_se_registra(client_log, ruta_log
     assert [f["estado_http"] for f in filas] == ["405"]
 
 
+def test_las_solicitudes_options_a_predict_no_se_registran(client_log, ruta_log):
+    assert client_log.options("/predict").status_code == 200
+    assert not ruta_log.exists()
+
+
 def test_error_interno_en_predict_se_registra_como_500(settings_log, ruta_log, registro_valido, monkeypatch):
     import api
 
@@ -209,3 +214,4 @@ def test_las_muestras_entregadas_coinciden_con_el_reporte(nombre, total, fallida
     resultado = metricas.calcular(muestra)
     assert (resultado["total"], resultado["fallidas"]) == (total, fallidas)
     assert metricas.formatear_porcentaje(resultado["porcentaje_fallos"]) == porcentaje
+    

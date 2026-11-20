@@ -96,7 +96,7 @@ fecha_hora,estado_http,version,prediccion
 | Método distinto de POST en `/predict` / cuerpo > 1 MB | `405` / `413` | vacía | vacía |
 | Error inesperado | `500` | vacía | vacía |
 
-La versión y la predicción solo se escriben **después** de que el modelo devuelve el resultado: en un 422 el modelo no se usó, así que la versión queda vacía. `/health` y `/train` no se registran.
+La versión y la predicción solo se escriben **después** de que el modelo devuelve el resultado: en un 422 el modelo no se usó, así que la versión queda vacía. `/health` y `/train` no se registran. Las solicitudes `OPTIONS` a `/predict` (las responde Flask automáticamente; no son predicciones) tampoco.
 
 **Persistencia.** El archivo se abre en modo agregar (`"a"`), y el encabezado se escribe solo cuando el archivo es nuevo o está vacío, así que el historial se conserva entre ejecuciones. Un candado (`threading.Lock`) evita que dos hilos de gunicorn mezclen sus filas. En Docker, `logs/` se monta desde el equipo anfitrión, igual que `models/`. Si el archivo no se puede escribir, la respuesta al cliente no cambia y el error queda en los logs de la API.
 
@@ -135,7 +135,7 @@ Este porcentaje mide **el funcionamiento del servicio** (cuántas solicitudes no
 
 **Cuál usa la API.** La versión activa aparece en `GET /health` (`version_activa`), en cada respuesta de `/predict` (`version`) y en la columna `version` del registro.
 
-**Por qué `v3`.** `v1` y `v3` se entrenaron con los mismos datos, parámetros y semilla, así que tienen las mismas métricas sobre la misma partición de prueba y dan las mismas predicciones (en el ensayo, `0.006983` y `0.736106`, iguales a `fase-2/outputs/predicciones.csv`). Se activa `v3` para usar la versión producida por la propia API y demostrar el ciclo «entrenar con `/train` → activar → poder volver». Según la política de abajo, un empate no justificaría cambiar en producción; aquí el cambio no altera ninguna predicción. `v2` no se usa como referencia porque su F1 mayor sale de **otra partición** de prueba (semilla 7), así que no es comparable con el de `v1` o `v3` (ver `fase-2/README.md`).
+**Por qué `v3`.** `v1` y `v3` se entrenaron con los mismos datos, parámetros y semilla, así que tienen las mismas métricas sobre la misma partición de prueba y dan las mismas predicciones (en el ensayo, `0.006983` y `0.736106`, iguales a `fase-2/outputs/predicciones.csv`). La activación inicial de `v3` **no aplica la política de reentrenamiento** de abajo (todavía no hay casos nuevos con resultado real, y con métricas iguales la política no justificaría el cambio): se hizo para demostrar el ciclo «entrenar con `/train` → activar → poder volver a `v1`», y no altera ninguna predicción. `v2` no se usa como referencia porque su F1 mayor sale de **otra partición** de prueba (semilla 7), así que no es comparable con el de `v1` o `v3` (ver `fase-2/README.md`).
 
 **Cómo volver a la versión anterior (`v1`).** Con la configuración existente, sin tocar código: se define `MODEL_VERSION=v1` y se reinicia la API.
 
@@ -234,9 +234,9 @@ Métricas calculadas con `docker exec churn-api python metricas.py`:
 
 ### Política de reentrenamiento
 
-Al reunir **500 clientes nuevos con `Churn` observado** (el resultado real, conocido al terminar el periodo de observación), un integrante del equipo los agrega al CSV de entrenamiento, reserva aparte una porción de esos casos y ejecuta manualmente `POST /train` para crear una versión candidata. La candidata y la versión activa se evalúan con la **métrica principal de la Fase 2, el F1 de la clase `Churn = Yes`**, sobre **los mismos casos reservados** (no usados en el entrenamiento de ninguna de las dos). La candidata se activa con `MODEL_VERSION` solo si su F1 supera al de la versión activa. Si no lo supera, se mantiene la activa y la candidata queda guardada en `models/`.
+Al reunir **500 clientes nuevos con `Churn` observado** (el resultado real, conocido al terminar el periodo de observación), un integrante del equipo los agrega al CSV de entrenamiento, reserva una porción como casos de prueba y ejecuta manualmente `POST /train` para crear una versión candidata. La candidata y la versión activa se comparan con la **métrica principal de la Fase 2, el F1 de la clase `Churn = Yes`**, sobre esos mismos casos reservados, que no se usan para entrenar ninguna de las dos. La candidata se activa con `MODEL_VERSION` solo si su F1 supera al de la versión activa; si no lo supera, se mantiene la activa y la candidata queda guardada en `models/`.
 
-Un 4xx en el registro no dispara esta revisión: un campo ausente se corrige en quien envía los datos. La revisión depende de los casos con resultado real. Se eligieron 500 clientes, alrededor del 7 % de los 7 043 actuales y unos 130 abandonos con la tasa observada del 26.5 %, para que la comparación de F1 tenga suficientes casos positivos.
+**Justificación.** Un 4xx en el registro no dispara esta revisión: un campo ausente se corrige en quien envía los datos, y la revisión depende de los casos con resultado real. Se eligieron 500 clientes, alrededor del 7 % de los 7 043 actuales y unos 130 abandonos con la tasa observada del 26.5 %, para que la comparación de F1 tenga suficientes casos positivos.
 
 ### Identificadores de las versiones
 
@@ -247,12 +247,15 @@ Un 4xx en el registro no dispara esta revisión: un campo ausente se corrige en 
 
 ## Guía paso a paso: reproducir el reporte
 
-Todos los comandos se ejecutan desde la carpeta `fase-4`. En PowerShell se escribe `curl.exe`; en Bash, `curl`.
+Todos los comandos se ejecutan desde la carpeta `fase-4`, en PowerShell (Windows) o en Bash (Linux / macOS). Los comandos de `curl` se muestran para cada sistema: en PowerShell se usa `curl.exe` porque `curl` es un alias de otro comando.
 
 ### Paso 1. Entorno e instalación
 
+Si el repositorio ya está clonado, basta con el `cd`, ejecutado desde la carpeta que contiene el repositorio.
+
 **Windows (PowerShell):**
 ```powershell
+git clone https://github.com/CaroGomezO/telco-customer-churn-prediction.git
 cd telco-customer-churn-prediction\fase-4
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -261,6 +264,7 @@ python -m pip install -r requirements.txt
 
 **Linux / macOS (Bash):**
 ```bash
+git clone https://github.com/CaroGomezO/telco-customer-churn-prediction.git
 cd telco-customer-churn-prediction/fase-4
 python3 -m venv .venv
 source .venv/bin/activate
@@ -273,7 +277,7 @@ python -m pip install -r requirements.txt
 python -m pytest
 ```
 
-**Resultado esperado:** `98 passed`. Las pruebas escriben el registro en directorios temporales y no tocan `logs/`.
+**Resultado esperado:** `99 passed`. Las pruebas escriben el registro en directorios temporales y no tocan `logs/`.
 
 ### Paso 3. Partir de un registro vacío
 
@@ -299,13 +303,22 @@ python api.py
 ```
 
 **Terminal 2:**
+
+**Windows (PowerShell):**
+```powershell
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud.json"
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud_2.json"
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud_invalida.json"
+python metricas.py
+```
+
+**Linux / macOS (Bash):**
 ```bash
 curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @data/ejemplo_solicitud.json
 curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @data/ejemplo_solicitud_2.json
 curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @data/ejemplo_solicitud_invalida.json
 python metricas.py
 ```
-(En PowerShell, `curl.exe` y `-d "@data/ejemplo_solicitud.json"`.)
 
 **Resultado esperado:** dos respuestas 200 con `"version": "v3"`, una 422 y luego `Total de solicitudes: 3` y `Porcentaje de fallos: 33,3 %`. El archivo `logs/predicciones.csv` tiene tres filas como las del Reporte. Si aparecen solo dos, el rechazo no se registró.
 
@@ -355,8 +368,21 @@ docker run --rm -d --name churn-api -p 8000:8000 `
 | `fase-4/logs` | `/app/logs` | **Registro de `/predict`**: queda en el equipo anfitrión y sobrevive a `docker stop`. |
 | `fase-1` (solo lectura) | `/data` | `DatosCrudos.csv` para `/train`. |
 
-`docker ps` debe mostrar `churn-api` como `(healthy)` a los pocos segundos. Después se envían cinco solicitudes y se calculan las métricas dentro del contenedor (en PowerShell, `curl.exe` y `-d "@archivo"`):
+`docker ps` debe mostrar `churn-api` como `(healthy)` a los pocos segundos. Después se envían cinco solicitudes y se calculan las métricas dentro del contenedor:
 
+**Windows (PowerShell):**
+```powershell
+curl.exe http://localhost:8000/health
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud.json"
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud_2.json"
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud_invalida.json"
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud.json"
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@pytest.ini"
+docker exec churn-api python metricas.py
+docker stop churn-api
+```
+
+**Linux / macOS (Bash):**
 ```bash
 curl http://localhost:8000/health
 curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @data/ejemplo_solicitud.json
@@ -399,6 +425,17 @@ docker run --rm -d --name churn-api -p 8000:8000 -e MODEL_VERSION=v1 `
   modelos-fase4:1.0
 ```
 
+**Windows (PowerShell):**
+```powershell
+curl.exe http://localhost:8000/health
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud_2.json"
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud.json"
+curl.exe -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d "@data/ejemplo_solicitud_2.json"
+docker exec churn-api python metricas.py
+docker stop churn-api
+```
+
+**Linux / macOS (Bash):**
 ```bash
 curl http://localhost:8000/health
 curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @data/ejemplo_solicitud_2.json
@@ -421,8 +458,15 @@ Porcentaje de fallos: 25,0 %
 
 Con el contenedor ya detenido:
 
+**Windows (PowerShell):**
+```powershell
+Get-Content logs\predicciones.csv
+python metricas.py
+```
+
+**Linux / macOS (Bash):**
 ```bash
-cat logs/predicciones.csv      # PowerShell: Get-Content logs\predicciones.csv
+cat logs/predicciones.csv
 python metricas.py
 ```
 
@@ -466,12 +510,12 @@ Las mismas de la Fase 3 (ver `fase-3/README.md`), con estos cambios:
 python -m pytest
 ```
 
-Se mantienen las pruebas de la Fase 3 (`tests/test_api.py` y `tests/test_versiones.py`, 79 en total). Hay dos diferencias: el valor por defecto esperado de `MODEL_VERSION` es `v3`, y las pruebas de versiones cubren también `v3`, con su referencia en `tests/referencia/predicciones_v3.csv`, tomada de `fase-2/outputs/predicciones_v3.csv`. Se agregan 19 en `tests/test_registro.py`:
+Se mantienen las pruebas de la Fase 3 (`tests/test_api.py` y `tests/test_versiones.py`, 79 en total). Hay dos diferencias: el valor por defecto esperado de `MODEL_VERSION` es `v3`, y las pruebas de versiones cubren también `v3`, con su referencia en `tests/referencia/predicciones_v3.csv`, tomada de `fase-2/outputs/predicciones_v3.csv`. Se agregan 20 en `tests/test_registro.py`:
 
 | Grupo | Qué comprueba |
 |---|---|
 | Ensayo del enunciado | Dos válidas y una sin variable dan **3 filas** (200, 200, 422), con la versión y la predicción solo en las válidas; las métricas dan 3 y `33,3 %`. |
-| Una fila por intento | 400, 422, 405, 503 y 500 generan exactamente una fila sin versión ni predicción; `/health` y otras rutas no escriben. |
+| Una fila por intento | 400, 422, 405, 503 y 500 generan exactamente una fila sin versión ni predicción; `/health`, `OPTIONS /predict` y otras rutas no escriben. |
 | Persistencia | Dos ejecuciones de la API sobre el mismo archivo acumulan filas con un solo encabezado; 20 solicitudes simultáneas producen 20 filas. |
 | `metricas.py` | Registro inexistente, vacío o solo con encabezado → `0` y `sin solicitudes`; 4xx y 5xx cuentan como fallos (200, 201, 399 y 600 no); un archivo con formato incorrecto se rechaza. |
 | Muestras entregadas | `muestras/registro_prueba.csv` (3 solicitudes, `33,3 %`) y `muestras/registro_docker.csv` (8 solicitudes, `25,0 %`) tienen el formato esperado, solo las filas 200 traen versión y predicción, y reproducen los indicadores del Reporte. |

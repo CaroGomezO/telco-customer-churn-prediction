@@ -54,9 +54,10 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     @app.after_request
     def registrar_predict(response):
-        # Una fila por cada llamada a /predict, también las rechazadas (400, 405, 413, 422, 503, 500):
+        # Una fila por cada llamada a /predict, también las rechazadas (400, 405, 413, 422, 503, 500).
+        # Las solicitudes OPTIONS (las responde Flask automáticamente) no son intentos de predecir y no se registran:
         # after_request se ejecuta una sola vez por solicitud, después de la vista o del manejador de errores.
-        if registro is not None and request.path == "/predict":
+        if registro is not None and request.path == "/predict" and request.method != "OPTIONS":
             try:
                 registro.registrar(
                     response.status_code,
