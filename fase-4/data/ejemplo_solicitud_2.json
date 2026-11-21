@@ -1,0 +1,21 @@
+{
+  "customerID": "4094-NSEDU",
+  "gender": "Female",
+  "SeniorCitizen": 1,
+  "Partner": "No",
+  "Dependents": "No",
+  "tenure": 21,
+  "PhoneService": "Yes",
+  "MultipleLines": "Yes",
+  "InternetService": "Fiber optic",
+  "OnlineSecurity": "No",
+  "OnlineBackup": "No",
+  "DeviceProtection": "No",
+  "TechSupport": "No",
+  "StreamingTV": "Yes",
+  "StreamingMovies": "Yes",
+  "Contract": "Month-to-month",
+  "PaperlessBilling": "Yes",
+  "PaymentMethod": "Electronic check",
+  "MonthlyCharges": 94.25
+}
